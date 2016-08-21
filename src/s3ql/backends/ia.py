@@ -41,8 +41,8 @@ class Backend(AbstractBackend, metaclass=ABCDocstMeta):
         super().__init__()
         self.prefix = storage_url[len('ia://'):].rstrip('/')
 
-        iasession = get_session()
-        if not iasession.get_item(self.prefix).exists:
+        self.iasession = get_session()
+        if not self.iasession.get_item(self.prefix).exists:
             raise DanglingStorageURLError(self.prefix)
 
     @property
@@ -59,23 +59,23 @@ class Backend(AbstractBackend, metaclass=ABCDocstMeta):
 
     @copy_ancestor_docstring
     def lookup(self, key):
-        path = self._key_to_path(key)
-        try:
-            with open(path, 'rb') as src:
-                return _read_meta(src)
-        except FileNotFoundError:
+        iafile = self.iasession.get_files(self.prefix,key)
+        if iafile.exists:
+            return iafile.metadata
+        else:
             raise NoSuchObject(key)
 
     @copy_ancestor_docstring
     def get_size(self, key):
-        return os.path.getsize(self._key_to_path(key))
+        return self.iasession.get_files(self.prefix,key)[0].size
 
     @copy_ancestor_docstring
     def open_read(self, key):
-        path = self._key_to_path(key)
-        try:
-            fh = ObjectR(path)
-        except FileNotFoundError:
+        iafile = self.iasession.get_files(self.prefix,key)
+        if iafile.exists:
+            iafile.download
+            fh = ObjectR(iafile.name)
+        else:
             raise NoSuchObject(key)
 
         try:

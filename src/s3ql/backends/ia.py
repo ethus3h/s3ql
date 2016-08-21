@@ -287,6 +287,7 @@ class ObjectR(io.FileIO):
 
         The *checksum_warning* parameter is ignored.
         '''
+        # TODO: is it necessary to delete file afterward?
         super().close()
 
 class ObjectW(object):
@@ -323,7 +324,7 @@ class ObjectW(object):
 
     def close(self):
         '''Close object and upload data'''
-
+        #TODO: upload data
         self.fh.close()
         self.closed = True
 

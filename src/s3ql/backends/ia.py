@@ -112,28 +112,23 @@ class Backend(AbstractBackend, metaclass=ABCDocstMeta):
 
     @copy_ancestor_docstring
     def clear(self):
-        for name in os.listdir(self.prefix):
-            path = os.path.join(self.prefix, name)
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-            else:
-                os.unlink(path)
+        log.warning('clear method is not implemented by ia backend')
+        pass
 
     @copy_ancestor_docstring
     def contains(self, key):
-        path = self._key_to_path(key)
-        try:
-            os.lstat(path)
-        except FileNotFoundError:
+        iafile = self.iasession.get_files(self.prefix,key)
+        if iafile.exists:
+            return True
+        else:
             return False
-        return True
 
     @copy_ancestor_docstring
     def delete(self, key, force=False):
-        path = self._key_to_path(key)
-        try:
-            os.unlink(path)
-        except FileNotFoundError:
+        iafile = self.iasession.get_files(self.prefix,key)
+        if iafile.exists:
+            iafile.delete
+        else:
             if force:
                 pass
             else:
@@ -142,34 +137,17 @@ class Backend(AbstractBackend, metaclass=ABCDocstMeta):
     @copy_ancestor_docstring
     def list(self, prefix=''):
 
-        if prefix:
-            base = os.path.dirname(self._key_to_path(prefix))
-        else:
-            base = self.prefix
+        iafiles = self.iasession.get_files(self.prefix, prefix)
 
-        for (path, dirnames, filenames) in os.walk(base, topdown=True):
+        for iafile in iafiles:
+            # Skip temporary files
+            if '#' in iafile.name:
+                continue
 
-            # Do not look in wrong directories
-            if prefix:
-                rpath = path[len(self.prefix):] # path relative to base
-                prefix_l = ''.join(rpath.split('/'))
-
-                dirs_to_walk = list()
-                for name in dirnames:
-                    prefix_ll = unescape(prefix_l + name)
-                    if prefix_ll.startswith(prefix[:len(prefix_ll)]):
-                        dirs_to_walk.append(name)
-                dirnames[:] = dirs_to_walk
-
-            for name in filenames:
-                # Skip temporary files
-                if '#' in name:
-                    continue
-
-                key = unescape(name)
-
-                if not prefix or key.startswith(prefix):
-                    yield key
+            key = unescape(iafile.name)
+            #TODO: Should these next 3 lines happen?
+            if not prefix or key.startswith(prefix):
+                yield key
 
     @copy_ancestor_docstring
     def update_meta(self, key, metadata):
@@ -189,37 +167,13 @@ class Backend(AbstractBackend, metaclass=ABCDocstMeta):
         path_src = self._key_to_path(src)
         path_dest = self._key_to_path(dest)
 
-        try:
-            src = open(path_src, 'rb')
-        except FileNotFoundError:
-            raise NoSuchObject(src)
-
         dest = None
-        try:
-            # By renaming, we make sure that there are no conflicts between
-            # parallel writes, the last one wins
-            tmpname = '%s#%d-%d.tmp' % (path_dest, os.getpid(), _thread.get_ident())
-            dest = ObjectW(tmpname)
-
-            if metadata is not None:
-                try:
-                    _read_meta(src)
-                except ThawError:
-                    raise CorruptedObjectError('Invalid metadata')
-                dest.write(b's3ql_1\n')
-                dest.write(struct.pack('<H', len(buf)))
-                dest.write(buf)
-            shutil.copyfileobj(src, dest, BUFSIZE)
-        except:
-            if dest:
-                os.unlink(tmpname)
-            raise
-
-        finally:
-            src.close()
-            dest.close()
-
-        os.rename(tmpname, path_dest)
+        self.iasession.get_files(self.prefix,src)
+        if iafile.exists:
+            iafile.download
+            self.iasession.upload({dest: src})
+        else:
+            raise NoSuchObject(src)
 
     def _key_to_path(self, key):
         '''Return path for given key'''
